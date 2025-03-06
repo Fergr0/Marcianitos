@@ -555,3 +555,6 @@ PNG/Sprites/Station/spaceStation_028.png
 PNG/Sprites/Station/spaceStation_029.png
 PNG/Sprites/Station/spaceStation_030.png
 PNG/Sprites/Station/spaceStation_031.png
+PNG/explosion.p
+PNG/spaceBackground.png
+PNG/spaceEffects_009.png

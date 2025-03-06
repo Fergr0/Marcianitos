@@ -4,41 +4,79 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.ParticleEffect;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.Array;
+
 import java.util.Iterator;
 
 public class MyGame extends ApplicationAdapter {
     SpriteBatch batch;
-    Texture spaceshipTexture, bulletTexture, alienTexture;
+    Texture spaceshipTexture, bulletTexture, alienTexture, backgroundTexture;
     Spaceship spaceship;
     Array<Bullet> bullets;
     Array<Alien> aliens;
+    BitmapFont font;
+    int score = 0;
 
-    // Variables para disparo automático
     float timeSinceLastShot = 0;
-    float shootInterval = 0.5f; // dispara cada 0.5 segundos
-
-    // Variables para generar marcianos
+    float shootInterval = 0.3f;
     float alienSpawnTimer = 0;
-    float alienSpawnInterval = 2.0f; // genera un marciano cada 2 segundos
+    float alienSpawnInterval = 1.5f;
+    float meteorSpeed = 100;
 
     boolean gameOver = false;
+
+    Stage stage;
+    TextButton restartButton;
+
+    ParticleEffect explosionEffect;
+
+    float backgroundY = 0;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
+        backgroundTexture = new Texture("PNG/spaceBackground.png");
         spaceshipTexture = new Texture("PNG/Sprites/Ships/spaceShips_001.png");
         bulletTexture = new Texture("PNG/Sprites/Missiles/spaceMissiles_001.png");
         alienTexture = new Texture("PNG/Sprites/Meteors/spaceMeteors_001.png");
 
-        // Inicia la nave en el centro, a 50 píxeles del borde inferior
         spaceship = new Spaceship(spaceshipTexture, Gdx.graphics.getWidth() / 2, 50);
-        bullets = new Array<Bullet>();
-        aliens = new Array<Alien>();
+        bullets = new Array<>();
+        aliens = new Array<>();
+        font = new BitmapFont();
+
+        explosionEffect = new ParticleEffect();
+        explosionEffect.load(Gdx.files.internal("PNG/explosion.p"), Gdx.files.internal("particles/"));
+
+
+
+        stage = new Stage();
+        Gdx.input.setInputProcessor(stage);
+        TextButtonStyle buttonStyle = new TextButtonStyle();
+        buttonStyle.font = font;
+        restartButton = new TextButton("Reiniciar", buttonStyle);
+        restartButton.setPosition(Gdx.graphics.getWidth() / 2 - 50, Gdx.graphics.getHeight() / 2);
+        restartButton.setSize(200, 80);
+        restartButton.setVisible(false);
+
+        restartButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                resetGame();
+            }
+        });
+
+        stage.addActor(restartButton);
     }
 
     @Override
@@ -50,6 +88,9 @@ public class MyGame extends ApplicationAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         batch.begin();
+        batch.draw(backgroundTexture, 0, backgroundY, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        batch.draw(backgroundTexture, 0, backgroundY - Gdx.graphics.getHeight(), Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
         spaceship.draw(batch);
         for (Bullet bullet : bullets) {
             bullet.draw(batch);
@@ -57,33 +98,37 @@ public class MyGame extends ApplicationAdapter {
         for (Alien alien : aliens) {
             alien.draw(batch);
         }
+
+        font.draw(batch, "Puntos: " + score, 20, Gdx.graphics.getHeight() - 20);
+
+        explosionEffect.draw(batch, deltaTime);
+
         batch.end();
+
+        stage.act();
+        stage.draw();
     }
 
     public void update(float deltaTime) {
         if (gameOver) return;
 
-        // Movimiento de la nave y disparo automático cuando la pantalla está tocada
+        backgroundY -= 100 * deltaTime;
+        if (backgroundY <= -Gdx.graphics.getHeight()) {
+            backgroundY = 0;
+        }
+
         if (Gdx.input.isTouched()) {
-            // Convertir la posición de la pantalla a coordenadas del juego
             Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
             touchPos.y = Gdx.graphics.getHeight() - touchPos.y;
             spaceship.updatePosition(touchPos.x);
 
             timeSinceLastShot += deltaTime;
             if (timeSinceLastShot >= shootInterval) {
-                Bullet bullet = new Bullet(bulletTexture,
-                    spaceship.getX() + spaceship.getWidth() / 2,
-                    spaceship.getY() + spaceship.getHeight());
-                bullets.add(bullet);
+                bullets.add(new Bullet(bulletTexture, spaceship.getX() + spaceship.getWidth() / 2, spaceship.getY() + spaceship.getHeight()));
                 timeSinceLastShot = 0;
             }
-        } else {
-            // Si se suelta la pantalla, reiniciamos el contador para disparar inmediatamente al tocar de nuevo
-            timeSinceLastShot = shootInterval;
         }
 
-        // Actualizar la posición de los disparos
         Iterator<Bullet> bulletIter = bullets.iterator();
         while (bulletIter.hasNext()) {
             Bullet bullet = bulletIter.next();
@@ -93,49 +138,57 @@ public class MyGame extends ApplicationAdapter {
             }
         }
 
-        // Generar marcianos en la parte superior
         alienSpawnTimer += deltaTime;
         if (alienSpawnTimer >= alienSpawnInterval) {
             alienSpawnTimer = 0;
             float xPos = MathUtils.random(0, Gdx.graphics.getWidth() - alienTexture.getWidth());
-            Alien alien = new Alien(alienTexture, xPos, Gdx.graphics.getHeight());
-            aliens.add(alien);
+            aliens.add(new Alien(alienTexture, xPos, Gdx.graphics.getHeight(), meteorSpeed));
+            meteorSpeed += 5;
         }
 
-        // Actualizar la posición de los marcianos
         Iterator<Alien> alienIter = aliens.iterator();
         while (alienIter.hasNext()) {
             Alien alien = alienIter.next();
             alien.update(deltaTime);
-            // Si un marciano llega al fondo, el juego termina
             if (alien.getY() + alien.getHeight() < 0) {
-                gameOver = true;
-                System.out.println("Game Over: un marciano llegó al fondo.");
+                alienIter.remove();
             }
         }
 
-        // Detección de colisiones entre la nave y los marcianos
-        for (Alien alien : aliens) {
-            if (alien.getBoundingRectangle().overlaps(spaceship.getBoundingRectangle())) {
-                gameOver = true;
-                System.out.println("Game Over: la nave chocó con un marciano.");
-            }
-        }
-
-        // Detección de colisiones entre disparos y marcianos
-        Iterator<Bullet> bIter = bullets.iterator();
-        while (bIter.hasNext()) {
-            Bullet bullet = bIter.next();
-            Iterator<Alien> aIter = aliens.iterator();
-            while (aIter.hasNext()) {
-                Alien alien = aIter.next();
+        bulletIter = bullets.iterator();
+        while (bulletIter.hasNext()) {
+            Bullet bullet = bulletIter.next();
+            alienIter = aliens.iterator();
+            while (alienIter.hasNext()) {
+                Alien alien = alienIter.next();
                 if (bullet.getBoundingRectangle().overlaps(alien.getBoundingRectangle())) {
-                    bIter.remove();
-                    aIter.remove();
+                    explosionEffect.setPosition(alien.getX(), alien.getY());
+                    explosionEffect.start();
+                    bulletIter.remove();
+                    alienIter.remove();
+                    score += 50;
                     break;
                 }
             }
         }
+
+        for (Alien alien : aliens) {
+            if (alien.getBoundingRectangle().overlaps(spaceship.getBoundingRectangle())) {
+                gameOver = true;
+                restartButton.setVisible(true);
+                break;
+            }
+        }
+    }
+
+    private void resetGame() {
+        gameOver = false;
+        score = 0;
+        bullets.clear();
+        aliens.clear();
+        meteorSpeed = 100;
+        spaceship.setPosition(Gdx.graphics.getWidth() / 2 - spaceship.getWidth() / 2, 50);
+        restartButton.setVisible(false);
     }
 
     @Override
@@ -144,23 +197,24 @@ public class MyGame extends ApplicationAdapter {
         spaceshipTexture.dispose();
         bulletTexture.dispose();
         alienTexture.dispose();
+        backgroundTexture.dispose();
+        font.dispose();
+        explosionEffect.dispose();
+        stage.dispose();
     }
 
-    // Clase para la nave
     public class Spaceship extends Sprite {
         public Spaceship(Texture texture, float x, float y) {
             super(texture);
             setPosition(x - getWidth() / 2, y);
         }
-        // Actualiza la posición horizontal de la nave según el toque
         public void updatePosition(float x) {
             setX(x - getWidth() / 2);
         }
     }
 
-    // Clase para los disparos
     public class Bullet extends Sprite {
-        float speed = 300; // velocidad en píxeles por segundo
+        float speed = 300;
         public Bullet(Texture texture, float x, float y) {
             super(texture);
             setPosition(x - getWidth() / 2, y);
@@ -170,12 +224,12 @@ public class MyGame extends ApplicationAdapter {
         }
     }
 
-    // Clase para los marcianos
     public class Alien extends Sprite {
-        float speed = 100; // velocidad en píxeles por segundo
-        public Alien(Texture texture, float x, float y) {
+        float speed;
+        public Alien(Texture texture, float x, float y, float speed) {
             super(texture);
             setPosition(x, y);
+            this.speed = speed;
         }
         public void update(float deltaTime) {
             setY(getY() - speed * deltaTime);
