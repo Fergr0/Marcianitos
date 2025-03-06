@@ -2,6 +2,7 @@ package com.example.Marcianitos.android;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Sound; // Importamos Sound
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -39,6 +40,7 @@ public class MyGame extends ApplicationAdapter {
     TextButton restartButton;
 
     ParticleEffect explosionEffect;
+    Sound explosionSound; // Sonido de explosión
 
     float backgroundY = 0;
 
@@ -50,15 +52,15 @@ public class MyGame extends ApplicationAdapter {
         bulletTexture = new Texture("PNG/Sprites/Missiles/spaceMissiles_001.png");
         alienTexture = new Texture("PNG/Sprites/Meteors/spaceMeteors_001.png");
 
-        spaceship = new Spaceship(spaceshipTexture, Gdx.graphics.getWidth() / 2, 50);
+        spaceship = new Spaceship(spaceshipTexture, Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2);
         bullets = new Array<>();
         aliens = new Array<>();
         font = new BitmapFont();
 
         explosionEffect = new ParticleEffect();
-        explosionEffect.load(Gdx.files.internal("PNG/explosion.p"), Gdx.files.internal("particles/"));
+        explosionEffect.load(Gdx.files.internal("PNG/explosion.p"), Gdx.files.internal("PNG/"));
 
-
+        explosionSound = Gdx.audio.newSound(Gdx.files.internal("sounds/explosion.mp3")); // Cargar sonido
 
         stage = new Stage();
         Gdx.input.setInputProcessor(stage);
@@ -89,7 +91,7 @@ public class MyGame extends ApplicationAdapter {
 
         batch.begin();
         batch.draw(backgroundTexture, 0, backgroundY, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        batch.draw(backgroundTexture, 0, backgroundY - Gdx.graphics.getHeight(), Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        batch.draw(backgroundTexture, 0, backgroundY + Gdx.graphics.getHeight(), Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
         spaceship.draw(batch);
         for (Bullet bullet : bullets) {
@@ -112,15 +114,17 @@ public class MyGame extends ApplicationAdapter {
     public void update(float deltaTime) {
         if (gameOver) return;
 
-        backgroundY -= 100 * deltaTime;
+        float backgroundSpeed = 300;
+        backgroundY -= backgroundSpeed * deltaTime;
         if (backgroundY <= -Gdx.graphics.getHeight()) {
             backgroundY = 0;
         }
 
+        // 🚀 Movimiento de la nave en TODA la pantalla (X e Y)
         if (Gdx.input.isTouched()) {
             Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
             touchPos.y = Gdx.graphics.getHeight() - touchPos.y;
-            spaceship.updatePosition(touchPos.x);
+            spaceship.updatePosition(touchPos.x, touchPos.y);
 
             timeSinceLastShot += deltaTime;
             if (timeSinceLastShot >= shootInterval) {
@@ -150,8 +154,18 @@ public class MyGame extends ApplicationAdapter {
         while (alienIter.hasNext()) {
             Alien alien = alienIter.next();
             alien.update(deltaTime);
+
             if (alien.getY() + alien.getHeight() < 0) {
-                alienIter.remove();
+                gameOver = true;
+                restartButton.setVisible(true);
+                break;
+            }
+
+            // 🚨 **Colisión con la nave: Fin del juego**
+            if (alien.getBoundingRectangle().overlaps(spaceship.getBoundingRectangle())) {
+                gameOver = true;
+                restartButton.setVisible(true);
+                break;
             }
         }
 
@@ -164,19 +178,12 @@ public class MyGame extends ApplicationAdapter {
                 if (bullet.getBoundingRectangle().overlaps(alien.getBoundingRectangle())) {
                     explosionEffect.setPosition(alien.getX(), alien.getY());
                     explosionEffect.start();
+                    explosionSound.play(); // 🔊💥 Sonido de explosión
                     bulletIter.remove();
                     alienIter.remove();
                     score += 50;
                     break;
                 }
-            }
-        }
-
-        for (Alien alien : aliens) {
-            if (alien.getBoundingRectangle().overlaps(spaceship.getBoundingRectangle())) {
-                gameOver = true;
-                restartButton.setVisible(true);
-                break;
             }
         }
     }
@@ -187,7 +194,7 @@ public class MyGame extends ApplicationAdapter {
         bullets.clear();
         aliens.clear();
         meteorSpeed = 100;
-        spaceship.setPosition(Gdx.graphics.getWidth() / 2 - spaceship.getWidth() / 2, 50);
+        spaceship.setPosition(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2);
         restartButton.setVisible(false);
     }
 
@@ -201,15 +208,17 @@ public class MyGame extends ApplicationAdapter {
         font.dispose();
         explosionEffect.dispose();
         stage.dispose();
+        explosionSound.dispose(); // 🔊 Liberamos el sonido
     }
 
+    // Clases faltantes corregidas 🚀
     public class Spaceship extends Sprite {
         public Spaceship(Texture texture, float x, float y) {
             super(texture);
-            setPosition(x - getWidth() / 2, y);
+            setPosition(x - getWidth() / 2, y - getHeight() / 2);
         }
-        public void updatePosition(float x) {
-            setX(x - getWidth() / 2);
+        public void updatePosition(float x, float y) {
+            setPosition(x - getWidth() / 2, y - getHeight() / 2);
         }
     }
 
